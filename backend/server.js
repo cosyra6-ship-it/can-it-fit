@@ -30,7 +30,7 @@ function computeMissingDimensions(measurements){
 }
 
 function allowAnalyzeRequest(req){
-  const ip=req.socket.remoteAddress||'unknown';
+  const ip=clientIp(req);
   const now=Date.now();
   let bucket=rateBuckets.get(ip);
 
@@ -41,6 +41,25 @@ function allowAnalyzeRequest(req){
 
   bucket.count++;
   return bucket.count<=RATE_LIMIT_MAX;
+}
+
+function clientIp(req){
+  const xff=req.headers['x-forwarded-for'];
+  if(typeof xff==='string' && xff.length){
+    return xff.split(',')[0].trim();
+  }
+  return req.socket.remoteAddress||'unknown';
+}
+
+function fetchOpenAI(content){
+  const ac=new AbortController();
+  const timer=setTimeout(()=>ac.abort(),25000);
+  return fetch('https://api.openai.com/v1/responses',{
+    method:'POST',
+    headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},
+    body:JSON.stringify({model:process.env.OPENAI_VISION_MODEL||'gpt-4.1-mini',input:[{role:'user',content}],text:{format:{type:'json_object'}}}),
+    signal:ac.signal
+  }).finally(()=>clearTimeout(timer));
 }
 function readBody(req){
   return new Promise((resolve,reject)=>{
@@ -163,7 +182,7 @@ Do not estimate centimeters from visual appearance alone.
 
 Return strict JSON only:
 {"verdict":"can_fit|maybe|wont_fit","explanation":"one concise sentence","has_reference":true|false}`},{type:'input_image',image_url:body.item},{type:'input_image',image_url:body.space}];
-  const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_VISION_MODEL||'gpt-4.1-mini',input:[{role:'user',content}],text:{format:{type:'json_object'}}})});
+  const response=await fetchOpenAI(content);
   console.log('[openai] status:', response.status);
   const raw = await response.text();
 if (!response.ok) {
@@ -208,7 +227,7 @@ Rules:
 - Do NOT invent measurements.
 - Do NOT estimate from visual appearance.
 - All numbers in centimeters.`},{type:'input_image',image_url:body.item},{type:'input_image',image_url:body.space}];
-  const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_VISION_MODEL||'gpt-4.1-mini',input:[{role:'user',content}],text:{format:{type:'json_object'}}})});
+  const response=await fetchOpenAI(content);
   console.log('[measurements] status:', response.status);
   const raw = await response.text();
   if (!response.ok) {
