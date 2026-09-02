@@ -4,6 +4,31 @@ const RATE_LIMIT_WINDOW_MS=60*60*1000;
 const RATE_LIMIT_MAX=20;
 const rateBuckets=new Map();
 
+const DIMENSION_PAIRS=[
+  {item:'item_width',space:'space_width',label:'width',itemName:'Item width',spaceName:'Space width'},
+  {item:'item_height',space:'space_height',label:'height',itemName:'Item height',spaceName:'Space height'},
+  {item:'item_depth',space:'space_depth',label:'depth',itemName:'Item depth',spaceName:'Space depth'}
+];
+
+const MEASUREMENT_LABELS={
+  item_width:'Item width',
+  item_height:'Item height',
+  item_depth:'Item depth',
+  space_width:'Space width',
+  space_height:'Space height',
+  space_depth:'Space depth'
+};
+
+function emptyMeasurements(){
+  return {item_width:null,item_height:null,item_depth:null,space_width:null,space_height:null,space_depth:null};
+}
+
+function computeMissingDimensions(measurements){
+  return Object.keys(measurements)
+    .filter(k=>measurements[k]===null)
+    .map(k=>({key:k,name:MEASUREMENT_LABELS[k]}));
+}
+
 function allowAnalyzeRequest(req){
   const ip=req.socket.remoteAddress||'unknown';
   const now=Date.now();
@@ -46,7 +71,7 @@ function readBody(req){
   });
 }
 async function analyze(body){
-  if(!process.env.OPENAI_API_KEY) return {verdict:'maybe',explanation:'Photos received, but AI analysis is not configured yet. Add a ruler or tape measure to both photos for a reliable check.',configured:false};
+  if(!process.env.OPENAI_API_KEY) return {verdict:'maybe',explanation:'Photos received, but AI analysis is not configured yet. Add a ruler or tape measure to both photos for a reliable check.',configured:false,measurements:emptyMeasurements(),missing_dimensions:computeMissingDimensions(emptyMeasurements())};
 const content=[{type:'input_text',text:`You assess whether an item fits into a target space using two photos.
 
 The first image shows the ITEM.
@@ -149,7 +174,61 @@ if (!response.ok) {
 const data = JSON.parse(raw);
 const text = data.output?.flatMap(o => o.content || []).find(c => c.type === 'output_text')?.text;
 if (!text) throw new Error('Vision response contained no output text');
-return {...JSON.parse(text), configured:true};
+const verdictData = JSON.parse(text);
+
+let measurements = emptyMeasurements();
+if (verdictData.verdict === 'maybe') {
+  try {
+    measurements = await extractMeasurements(body);
+  } catch (extractErr) {
+    console.error('[measurements] extraction error:', extractErr.message || extractErr);
+  }
+}
+
+return {
+  ...verdictData,
+  configured: true,
+  measurements,
+  missing_dimensions: computeMissingDimensions(measurements)
+};
+}
+async function extractMeasurements(body){
+  const content=[{type:'input_text',text:`You are a measurement extraction assistant. Look at the two images and extract any numerical dimensions in centimeters that you can read from clearly visible rulers or measuring tapes.
+
+The first image shows the ITEM.
+The second image shows the SPACE or OPENING.
+
+Return strict JSON only with this exact schema:
+{"item_width": number|null,"item_height": number|null,"item_depth": number|null,"space_width": number|null,"space_height": number|null,"space_depth": number|null}
+
+Rules:
+- Only return a number if you can read it directly from a clearly visible ruler or measuring tape in the image.
+- If a dimension is not measurable from the image, return null.
+- Do NOT infer dimensions from ordinary objects.
+- Do NOT invent measurements.
+- Do NOT estimate from visual appearance.
+- All numbers in centimeters.`},{type:'input_image',image_url:body.item},{type:'input_image',image_url:body.space}];
+  const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_VISION_MODEL||'gpt-4.1-mini',input:[{role:'user',content}],text:{format:{type:'json_object'}}})});
+  console.log('[measurements] status:', response.status);
+  const raw = await response.text();
+  if (!response.ok) {
+    console.error('[measurements] request failed:', response.status, raw);
+    throw new Error(`Measurements provider returned ${response.status}: ${raw}`);
+  }
+
+  const data = JSON.parse(raw);
+  const text = data.output?.flatMap(o => o.content || []).find(c => c.type === 'output_text')?.text;
+  if (!text) throw new Error('Measurements response contained no output text');
+  const parsed = JSON.parse(text);
+  const asNumber = v => (typeof v === 'number' && Number.isFinite(v) && v > 0) ? v : null;
+  return {
+    item_width: asNumber(parsed.item_width),
+    item_height: asNumber(parsed.item_height),
+    item_depth: asNumber(parsed.item_depth),
+    space_width: asNumber(parsed.space_width),
+    space_height: asNumber(parsed.space_height),
+    space_depth: asNumber(parsed.space_depth)
+  };
 }
 http.createServer(async(req,res)=>{
   if(req.method==='POST' && req.url==='/api/analyze'){
