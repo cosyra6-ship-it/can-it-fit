@@ -73,16 +73,45 @@ Result = wont_fit.
 
 Once one reliable corresponding dimension proves impossibility, uncertainty about other dimensions must NOT change the verdict to maybe.
 
-2. Return "can_fit" only when the trustworthy visible measurements provide enough evidence that ALL necessary dimensions fit with reasonable clearance.
+2. Return "can_fit" ONLY when ALL of the following are true:
+- The item has a trustworthy numerical measurement for EVERY physical dimension necessary for the fit (for example, item width, item height, and item depth when all are necessary).
+- The space/opening has a trustworthy numerical measurement for that SAME dimension (for example, opening width, opening height, and opening depth when all are necessary).
+- Every same-dimension pair shows the item dimension is less than the opening dimension with reasonable clearance.
+
+CAN FIT REQUIRES A COMPLETE TRUSTWORTHY SAME-DIMENSION MEASUREMENT MATRIX.
+If the fit requires width, height and depth, then ALL of these must be present and trustworthy:
+- trustworthy item width AND trustworthy opening width
+- trustworthy item height AND trustworthy opening height
+- trustworthy item depth AND trustworthy opening depth
+If even ONE necessary dimension lacks a trustworthy same-dimension measurement pair, CAN FIT is FORBIDDEN. Return "maybe" instead.
 
 Do not return can_fit merely because one dimension fits.
 
 3. Return "maybe" when:
-- trustworthy measurements are missing,
+- trustworthy measurements are missing for any necessary dimension,
 - corresponding dimensions cannot be reliably compared,
 - measurements are too close for confidence,
 - a necessary dimension is hidden or unclear,
 - perspective or image angle prevents a reliable comparison.
+
+ASYMMETRY RULE — MANDATORY:
+- WON'T FIT: requires only ONE trustworthy same-dimension comparison that proves the item cannot fit.
+- CAN FIT: requires ALL necessary same-dimension comparisons to be complete and trustworthy.
+- Otherwise: MAYBE.
+
+FORBIDDEN REASONING FOR CAN FIT — visual appearance must NEVER substitute for a missing measurement. The following are NOT acceptable evidence for CAN FIT:
+- "looks wider", "looks taller", "looks deeper"
+- "appears large enough", "clearly larger", "clearly wider and taller"
+- "visually seems to fit", "obviously fits"
+- perspective-based size comparison
+- using an unmeasured dimension inferred from the image
+- assuming an unknown dimension is favorable
+- any qualitative visual judgment that is not backed by a numerical ruler/tape reading
+
+FINAL VERIFICATION BEFORE CAN FIT — MANDATORY:
+Before returning "can_fit", internally verify:
+"Have I identified trustworthy numerical measurements (read from a clearly readable ruler or measuring tape) for BOTH the item AND the space/opening for EVERY necessary physical dimension?"
+If the answer is NO for any necessary dimension, you MUST return "maybe". You MUST NOT return "can_fit".
 
 DIMENSION MATCHING RULE — MANDATORY:
 
