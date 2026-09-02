@@ -1,0 +1,6 @@
+{
+  "name": "can-it-fit",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": { "start": "node backend/server.js", "test": "node --test tests/*.test.js" }
+}
