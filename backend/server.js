@@ -110,8 +110,10 @@ Do not estimate centimeters from visual appearance alone.
 Return strict JSON only:
 {"verdict":"can_fit|maybe|wont_fit","explanation":"one concise sentence","has_reference":true|false}`},{type:'input_image',image_url:body.item},{type:'input_image',image_url:body.space}];
   const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_VISION_MODEL||'gpt-4.1-mini',input:[{role:'user',content}],text:{format:{type:'json_object'}}})});
+  console.log('[openai] status:', response.status);
   const raw = await response.text();
 if (!response.ok) {
+  console.error('[openai] request failed:', response.status, raw);
   throw new Error(`Vision provider returned ${response.status}: ${raw}`);
 }
 
@@ -122,6 +124,10 @@ return {...JSON.parse(text), configured:true};
 }
 http.createServer(async(req,res)=>{
   if(req.method==='POST' && req.url==='/api/analyze'){
+
+    console.log('[analyze] request reached backend');
+    console.log('[analyze] api key present:', Boolean(process.env.OPENAI_API_KEY));
+    console.log('[analyze] content-length:', req.headers['content-length'] || 'unknown');
 
     if(!allowAnalyzeRequest(req)){
       res.writeHead(429,{'Content-Type':'application/json'});
@@ -137,7 +143,7 @@ http.createServer(async(req,res)=>{
       return res.end(JSON.stringify(result));
 
     }catch(error){
-      console.error(error.message);
+      console.error('[analyze error]', error.stack || error.message);
 
       const status=error.statusCode||502;
 

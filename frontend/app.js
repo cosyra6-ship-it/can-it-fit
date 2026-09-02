@@ -20,13 +20,27 @@ async function analyze(){
       })
     });
 
-    const data=await r.json();
+    const raw = await r.text();
 
-if(!r.ok){
-  const error=new Error(data.error || 'Analysis request failed');
-  error.status=r.status;
-  throw error;
-}
+    let data = {};
+
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch {
+      console.error(
+        'Non-JSON API response:',
+        r.status,
+        raw.slice(0, 500)
+      );
+    }
+
+    if (!r.ok) {
+      const error = new Error(
+        data.error || `Analysis request failed (${r.status})`
+      );
+      error.status = r.status;
+      throw error;
+    }
 
     const verdict=toVerdict(data);
     state.step=4;
